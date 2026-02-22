@@ -48,7 +48,7 @@ async function startCall() {
 
     pc = new RTCPeerConnection();
 
-    // Required so offer contains audio section
+    // Required: ensures offer contains audio media section
     pc.addTransceiver("audio", { direction: "recvonly" });
 
     audioEl = document.createElement("audio");
@@ -69,6 +69,14 @@ async function startCall() {
 
       if (msg.type === "session.created") {
 
+        // 🔥 CRITICAL: configure session for audio FIRST
+        dc.send(JSON.stringify({
+          type: "session.update",
+          session: {
+            voice: "alloy"
+          }
+        }));
+
         const scenario = document.getElementById("leadType").value;
 
         let text = "Say hello clearly.";
@@ -79,15 +87,22 @@ async function startCall() {
         if (scenario === "withdrawn") text = "You are unsure what to do. Speak.";
         if (scenario === "surprise") text = "You are a difficult seller personality. Speak.";
 
-        dc.send(JSON.stringify({
-          type: "response.create",
-          response: {
-            modalities: ["audio", "text"],  // 🔥 THIS FIXES IT
-            instructions: text
-          }
-        }));
+        // small delay prevents race condition
+        setTimeout(() => {
+          dc.send(JSON.stringify({
+            type: "response.create",
+            response: {
+              modalities: ["audio", "text"],
+              instructions: text
+            }
+          }));
+        }, 400);
 
         setStatus("Speaking...");
+      }
+
+      if (msg.type === "response.output_audio.delta") {
+        console.log("AUDIO DELTA RECEIVED");
       }
     };
 

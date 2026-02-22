@@ -48,7 +48,7 @@ async function startCall() {
 
     pc = new RTCPeerConnection();
 
-    // 🔥 THIS FIXES YOUR 400 ERROR
+    // Required so offer contains audio section
     pc.addTransceiver("audio", { direction: "recvonly" });
 
     audioEl = document.createElement("audio");
@@ -77,12 +77,12 @@ async function startCall() {
         if (scenario === "expired") text = "You are frustrated your listing expired. Speak.";
         if (scenario === "canceled") text = "You distrust agents. Speak.";
         if (scenario === "withdrawn") text = "You are unsure what to do. Speak.";
-        if (scenario === "surprise") text = "You are a random difficult seller. Speak.";
+        if (scenario === "surprise") text = "You are a difficult seller personality. Speak.";
 
         dc.send(JSON.stringify({
           type: "response.create",
           response: {
-            modalities: ["audio"],
+            modalities: ["audio", "text"],  // 🔥 THIS FIXES IT
             instructions: text
           }
         }));

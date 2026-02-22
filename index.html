@@ -11,6 +11,7 @@ async function startCall() {
   try {
     setStatus("Requesting microphone…");
 
+    // Get mic
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
     setStatus("Getting token…");
@@ -35,13 +36,23 @@ async function startCall() {
 
     pc = new RTCPeerConnection();
 
-    // Audio output
+    // Create audio output element
     audioEl = document.createElement("audio");
     audioEl.autoplay = true;
+    audioEl.playsInline = true;
+    audioEl.muted = false;
     document.body.appendChild(audioEl);
 
-    pc.ontrack = (event) => {
+    // When remote audio arrives
+    pc.ontrack = async (event) => {
       audioEl.srcObject = event.streams[0];
+
+      try {
+        await audioEl.play();
+        console.log("Audio playing");
+      } catch (err) {
+        console.error("Playback blocked:", err);
+      }
     };
 
     // Add mic track
@@ -49,7 +60,7 @@ async function startCall() {
       pc.addTrack(track, localStream)
     );
 
-    // Data channel
+    // Create data channel
     dc = pc.createDataChannel("oai-events");
 
     dc.onopen = () => {
@@ -63,10 +74,11 @@ async function startCall() {
         }
       }));
 
-      // 🔥 Make AI start conversation
+      // Force AI to start conversation
       dc.send(JSON.stringify({
         type: "response.create",
         response: {
+          modalities: ["audio", "text"],
           instructions: "Start the conversation by saying hello and introducing yourself."
         }
       }));
@@ -80,7 +92,7 @@ async function startCall() {
       }
 
       if (msg.type === "response.completed") {
-        console.log("Response complete");
+        console.log("Response finished");
       }
     };
 

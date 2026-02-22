@@ -1,17 +1,12 @@
-import express from "express";
-import fetch from "node-fetch";
-
-const app = express();
-app.use(express.json());
-
-app.post("/token", async (req, res) => {
+export async function onRequestPost(context) {
   try {
+
     const response = await fetch(
       "https://api.openai.com/v1/realtime/sessions",
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Authorization": `Bearer ${context.env.OPENAI_API_KEY}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -21,17 +16,26 @@ app.post("/token", async (req, res) => {
       }
     );
 
+    if (!response.ok) {
+      const errText = await response.text();
+      return new Response(errText, { status: 500 });
+    }
+
     const data = await response.json();
 
-    res.json({
-      token: data.client_secret.value
-    });
+    return new Response(
+      JSON.stringify({
+        token: data.client_secret.value
+      }),
+      {
+        headers: { "Content-Type": "application/json" }
+      }
+    );
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Token generation failed" });
+    return new Response(
+      JSON.stringify({ error: "Token generation failed" }),
+      { status: 500 }
+    );
   }
-});
-
-app.listen(3000, () => console.log("Server running"));
-
+}

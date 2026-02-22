@@ -48,7 +48,7 @@ async function startCall() {
 
     pc = new RTCPeerConnection();
 
-    // Required: ensures offer contains audio media section
+    // Required: ensure audio media section exists
     pc.addTransceiver("audio", { direction: "recvonly" });
 
     audioEl = document.createElement("audio");
@@ -69,10 +69,11 @@ async function startCall() {
 
       if (msg.type === "session.created") {
 
-        // 🔥 CRITICAL: configure session for audio FIRST
+        // 🔥 Enable audio output at session level
         dc.send(JSON.stringify({
           type: "session.update",
           session: {
+            modalities: ["audio", "text"],
             voice: "alloy"
           }
         }));
@@ -87,7 +88,6 @@ async function startCall() {
         if (scenario === "withdrawn") text = "You are unsure what to do. Speak.";
         if (scenario === "surprise") text = "You are a difficult seller personality. Speak.";
 
-        // small delay prevents race condition
         setTimeout(() => {
           dc.send(JSON.stringify({
             type: "response.create",

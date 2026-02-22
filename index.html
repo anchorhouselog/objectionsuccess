@@ -27,10 +27,11 @@ function setStatus(t) {
 
 async function startCall() {
   try {
-    setStatus("Requesting mic...");
+
+    setStatus("Requesting microphone...");
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-    setStatus("Getting token...");
+    setStatus("Getting session token...");
 
     const tokenResp = await fetch("/token", {
       method: "POST"
@@ -46,15 +47,26 @@ async function startCall() {
     const tokenJson = await tokenResp.json();
     const EPHEMERAL_TOKEN = tokenJson.token;
 
+    if (!EPHEMERAL_TOKEN) {
+      console.error("No token returned:", tokenJson);
+      setStatus("Invalid token");
+      return;
+    }
+
     pc = new RTCPeerConnection();
 
     audioEl = document.createElement("audio");
     audioEl.autoplay = true;
+    audioEl.playsInline = true;
     document.body.appendChild(audioEl);
 
     pc.ontrack = (event) => {
       console.log("Audio track received");
       audioEl.srcObject = event.streams[0];
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log("Connection state:", pc.connectionState);
     };
 
     localStream.getTracks().forEach(track =>
@@ -90,7 +102,7 @@ async function startCall() {
     await pc.setLocalDescription(offer);
 
     const sdpResp = await fetch(
-      "https://api.openai.com/v1/realtime?model=gpt-4o-realtime",
+      "https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17",
       {
         method: "POST",
         headers: {
@@ -103,20 +115,24 @@ async function startCall() {
 
     if (!sdpResp.ok) {
       const errText = await sdpResp.text();
-      console.error("SDP error:", errText);
+      console.error("SDP negotiation failed:", errText);
       setStatus("SDP error");
       return;
     }
 
     const answer = await sdpResp.text();
-    await pc.setRemoteDescription({ type: "answer", sdp: answer });
+
+    await pc.setRemoteDescription({
+      type: "answer",
+      sdp: answer
+    });
 
     document.getElementById("startBtn").disabled = true;
     document.getElementById("endBtn").disabled = false;
 
   } catch (err) {
-    console.error(err);
-    setStatus("Error");
+    console.error("Start call error:", err);
+    setStatus("Error starting call");
   }
 }
 
@@ -128,6 +144,7 @@ function endCall() {
 
   document.getElementById("startBtn").disabled = false;
   document.getElementById("endBtn").disabled = true;
+
   setStatus("Idle");
 }
 

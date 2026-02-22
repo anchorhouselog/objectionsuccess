@@ -2,7 +2,7 @@ export async function onRequestPost(context) {
   try {
 
     const response = await fetch(
-      "https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17",
+      "https://api.openai.com/v1/realtime/sessions",
       {
         method: "POST",
         headers: {
@@ -10,7 +10,7 @@ export async function onRequestPost(context) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "model: "gpt-4o-realtime-preview-2024-12-17",
+          model: "gpt-4o-realtime-preview-2024-12-17",
           voice: "alloy"
         })
       }
@@ -18,10 +18,20 @@ export async function onRequestPost(context) {
 
     if (!response.ok) {
       const errText = await response.text();
-      return new Response(errText, { status: 500 });
+      return new Response(
+        JSON.stringify({ error: errText }),
+        { status: 500 }
+      );
     }
 
     const data = await response.json();
+
+    if (!data.client_secret || !data.client_secret.value) {
+      return new Response(
+        JSON.stringify({ error: "No client_secret returned", data }),
+        { status: 500 }
+      );
+    }
 
     return new Response(
       JSON.stringify({
@@ -39,4 +49,3 @@ export async function onRequestPost(context) {
     );
   }
 }
-

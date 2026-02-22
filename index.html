@@ -42,8 +42,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
   async function startCall() {
     try {
-      setStatus("Requesting microphone…");
 
+      setStatus("Requesting microphone…");
       localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
       setStatus("Getting token…");
@@ -59,7 +59,7 @@ window.addEventListener("DOMContentLoaded", () => {
       const tokenJson = await tokenResp.json();
 
       if (!tokenResp.ok || !tokenJson.token) {
-        console.error(tokenJson);
+        console.error("Token error:", tokenJson);
         setStatus("Token error");
         return;
       }
@@ -73,9 +73,9 @@ window.addEventListener("DOMContentLoaded", () => {
       audioEl.playsInline = true;
       document.body.appendChild(audioEl);
 
-      pc.ontrack = async (event) => {
+      pc.ontrack = (event) => {
+        console.log("Audio track received");
         audioEl.srcObject = event.streams[0];
-        await audioEl.play();
       };
 
       localStream.getTracks().forEach(track =>
@@ -85,15 +85,21 @@ window.addEventListener("DOMContentLoaded", () => {
       dc = pc.createDataChannel("oai-events");
 
       dc.onopen = () => {
+
         setStatus("Connected.");
 
+        // Configure session for audio output
         dc.send(JSON.stringify({
           type: "session.update",
           session: {
+            modalities: ["audio"],
+            voice: "alloy",
+            output_audio_format: "pcm16",
             turn_detection: { type: "server_vad" }
           }
         }));
 
+        // Trigger first response
         dc.send(JSON.stringify({
           type: "response.create",
           response: {
@@ -107,7 +113,7 @@ window.addEventListener("DOMContentLoaded", () => {
       await pc.setLocalDescription(offer);
 
       const sdpResp = await fetch(
-        "model=gpt-4o-realtime",
+        "https://api.openai.com/v1/realtime?model=gpt-4o-realtime",
         {
           method: "POST",
           headers: {
@@ -118,8 +124,19 @@ window.addEventListener("DOMContentLoaded", () => {
         }
       );
 
+      if (!sdpResp.ok) {
+        const errText = await sdpResp.text();
+        console.error("SDP error:", errText);
+        setStatus("SDP negotiation failed");
+        return;
+      }
+
       const answerSdp = await sdpResp.text();
-      await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+
+      await pc.setRemoteDescription({
+        type: "answer",
+        sdp: answerSdp
+      });
 
       document.getElementById("startBtn").disabled = true;
       document.getElementById("endBtn").disabled = false;
@@ -131,6 +148,7 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   async function endCall() {
+
     if (dc) dc.close();
     if (pc) pc.close();
     if (localStream) localStream.getTracks().forEach(t => t.stop());
@@ -150,4 +168,3 @@ window.addEventListener("DOMContentLoaded", () => {
 
 </body>
 </html>
-

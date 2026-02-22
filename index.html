@@ -2,11 +2,11 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>ObjectionSuccess</title>
+  <title>ObjectionSuccess (PCM)</title>
 </head>
 <body style="font-family: system-ui; padding: 30px; max-width: 700px; margin:auto;">
 
-<h2>ObjectionSuccess (PCM Mode)</h2>
+<h2>ObjectionSuccess (Stable PCM Mode)</h2>
 
 <select id="leadType">
   <option value="surprise">Surprise me</option>
@@ -26,9 +26,8 @@
 
 let pc;
 let dc;
-let audioCtx;
-let audioQueue = [];
-let isPlaying = false;
+let audioCtx = null;
+let nextPlayTime = 0;
 
 function setStatus(text) {
   document.getElementById("status").innerText = "Status: " + text;
@@ -54,7 +53,7 @@ function base64ToFloat32(base64) {
   return float32;
 }
 
-async function playPCMChunk(float32) {
+function playPCM(float32) {
   if (!audioCtx) {
     audioCtx = new AudioContext({ sampleRate: 24000 });
   }
@@ -65,7 +64,13 @@ async function playPCMChunk(float32) {
   const source = audioCtx.createBufferSource();
   source.buffer = buffer;
   source.connect(audioCtx.destination);
-  source.start();
+
+  if (nextPlayTime < audioCtx.currentTime) {
+    nextPlayTime = audioCtx.currentTime;
+  }
+
+  source.start(nextPlayTime);
+  nextPlayTime += buffer.duration;
 }
 
 async function startCall() {
@@ -77,28 +82,30 @@ async function startCall() {
     const tokenData = await tokenResp.json();
 
     if (!tokenData.token) {
-      console.error(tokenData);
+      console.error("Token error:", tokenData);
       setStatus("Token error");
       return;
     }
 
     pc = new RTCPeerConnection();
+
+    // Required so offer contains audio section
     pc.addTransceiver("audio", { direction: "recvonly" });
 
     dc = pc.createDataChannel("oai-events");
 
-    dc.onmessage = async (event) => {
+    dc.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       console.log("SERVER:", msg);
 
       if (msg.type === "session.created") {
 
+        // Enable audio system
         dc.send(JSON.stringify({
           type: "session.update",
           session: {
             modalities: ["audio", "text"],
-            voice: "alloy",
-            output_audio_format: "pcm16"
+            voice: "alloy"
           }
         }));
 
@@ -117,17 +124,26 @@ async function startCall() {
             type: "response.create",
             response: {
               modalities: ["audio", "text"],
-              instructions: text
+              instructions: text,
+              audio: {
+                voice: "alloy",
+                format: "pcm16"
+              }
             }
           }));
-        }, 400);
+        }, 300);
 
         setStatus("Speaking...");
       }
 
+      // 🔥 THIS IS WHAT WE WANT
       if (msg.type === "response.output_audio.delta") {
         const float32 = base64ToFloat32(msg.delta);
-        await playPCMChunk(float32);
+        playPCM(float32);
+      }
+
+      if (msg.type === "response.done") {
+        setStatus("Done");
       }
     };
 

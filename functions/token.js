@@ -1,6 +1,5 @@
 export async function onRequestPost(context) {
   try {
-
     const response = await fetch(
       "https://api.openai.com/v1/realtime/sessions",
       {
@@ -16,35 +15,20 @@ export async function onRequestPost(context) {
       }
     );
 
-    if (!response.ok) {
-      const errText = await response.text();
-      return new Response(
-        JSON.stringify({ error: errText }),
-        { status: 500 }
-      );
-    }
-
     const data = await response.json();
 
-    if (!data.client_secret || !data.client_secret.value) {
-      return new Response(
-        JSON.stringify({ error: "No client_secret returned", data }),
-        { status: 500 }
-      );
+    if (!data.client_secret?.value) {
+      return new Response(JSON.stringify(data), { status: 500 });
     }
 
     return new Response(
-      JSON.stringify({
-        token: data.client_secret.value
-      }),
-      {
-        headers: { "Content-Type": "application/json" }
-      }
+      JSON.stringify({ token: data.client_secret.value }),
+      { headers: { "Content-Type": "application/json" } }
     );
 
   } catch (err) {
     return new Response(
-      JSON.stringify({ error: "Token generation failed" }),
+      JSON.stringify({ error: "Token creation failed" }),
       { status: 500 }
     );
   }

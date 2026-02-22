@@ -2,7 +2,7 @@ export async function onRequestPost(context) {
   try {
 
     const response = await fetch(
-      "https://api.openai.com/v1/realtime/sessions",
+      "https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17",
       {
         method: "POST",
         headers: {
@@ -10,7 +10,7 @@ export async function onRequestPost(context) {
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          model: "gpt-4o-realtime",
+          model: "model: "gpt-4o-realtime-preview-2024-12-17",
           voice: "alloy"
         })
       }
@@ -39,3 +39,4 @@ export async function onRequestPost(context) {
     );
   }
 }
+

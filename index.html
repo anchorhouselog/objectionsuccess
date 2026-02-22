@@ -8,162 +8,126 @@
 
 <body style="font-family: system-ui; padding: 30px; max-width: 720px; margin:auto;">
 
-  <h2>ObjectionSuccess (Private Beta)</h2>
+<h2>ObjectionSuccess (Private Beta)</h2>
 
-  <label for="leadType">Scenario:</label>
-  <select id="leadType">
-    <option value="surprise">Surprise me</option>
-    <option value="fsbo">FSBO</option>
-    <option value="expired">Expired</option>
-    <option value="canceled">Canceled</option>
-    <option value="withdrawn">Withdrawn</option>
-  </select>
+<button id="startBtn">📞 Start Call</button>
+<button id="endBtn" disabled>⛔ End Call</button>
 
-  <div style="margin-top:16px;">
-    <button id="startBtn">📞 Start Call</button>
-    <button id="endBtn" disabled>⛔ End Call</button>
-  </div>
-
-  <p id="status" style="margin-top:14px;">Status: idle</p>
+<p id="status">Status: idle</p>
 
 <script>
-window.addEventListener("DOMContentLoaded", () => {
+const WORKER_URL = "/token";
 
-  const WORKER_URL = "/token";
+let pc;
+let dc;
+let localStream;
+let audioEl;
 
-  let pc = null;
-  let dc = null;
-  let localStream = null;
-  let audioEl = null;
+function setStatus(t) {
+  document.getElementById("status").textContent = "Status: " + t;
+}
 
-  function setStatus(t) {
-    document.getElementById("status").textContent = "Status: " + t;
-  }
+async function startCall() {
+  try {
+    setStatus("Requesting mic...");
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-  async function startCall() {
-    try {
+    setStatus("Getting token...");
+    const tokenResp = await fetch(WORKER_URL, { method: "POST" });
+    const tokenJson = await tokenResp.json();
 
-      setStatus("Requesting microphone…");
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-      setStatus("Getting token…");
-
-      const leadType = document.getElementById("leadType").value;
-
-      const tokenResp = await fetch(WORKER_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadType })
-      });
-
-      const tokenJson = await tokenResp.json();
-
-      if (!tokenResp.ok || !tokenJson.token) {
-        console.error("Token error:", tokenJson);
-        setStatus("Token error");
-        return;
-      }
-
-      const EPHEMERAL_TOKEN = tokenJson.token;
-
-      pc = new RTCPeerConnection();
-
-      audioEl = document.createElement("audio");
-      audioEl.autoplay = true;
-      audioEl.playsInline = true;
-      document.body.appendChild(audioEl);
-
-      pc.ontrack = (event) => {
-        console.log("Audio track received");
-        audioEl.srcObject = event.streams[0];
-      };
-
-      localStream.getTracks().forEach(track =>
-        pc.addTrack(track, localStream)
-      );
-
-      dc = pc.createDataChannel("oai-events");
-
-      dc.onopen = () => {
-
-        setStatus("Connected.");
-
-        // Configure session for audio output
-        dc.send(JSON.stringify({
-          type: "session.update",
-          session: {
-            modalities: ["audio"],
-            voice: "alloy",
-            output_audio_format: "pcm16",
-            turn_detection: { type: "server_vad" }
-          }
-        }));
-
-        // Trigger first response
-        dc.send(JSON.stringify({
-          type: "response.create",
-          response: {
-            modalities: ["audio"],
-            instructions: "Say hello."
-          }
-        }));
-      };
-
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      const sdpResp = await fetch(
-        "https://api.openai.com/v1/realtime?model=gpt-4o-realtime",
-        {
-          method: "POST",
-          headers: {
-            Authorization: "Bearer " + EPHEMERAL_TOKEN,
-            "Content-Type": "application/sdp"
-          },
-          body: offer.sdp
-        }
-      );
-
-      if (!sdpResp.ok) {
-        const errText = await sdpResp.text();
-        console.error("SDP error:", errText);
-        setStatus("SDP negotiation failed");
-        return;
-      }
-
-      const answerSdp = await sdpResp.text();
-
-      await pc.setRemoteDescription({
-        type: "answer",
-        sdp: answerSdp
-      });
-
-      document.getElementById("startBtn").disabled = true;
-      document.getElementById("endBtn").disabled = false;
-
-    } catch (err) {
-      console.error(err);
-      setStatus("Error starting call");
+    if (!tokenJson.token) {
+      console.error(tokenJson);
+      setStatus("Token error");
+      return;
     }
+
+    pc = new RTCPeerConnection();
+
+    audioEl = document.createElement("audio");
+    audioEl.autoplay = true;
+    document.body.appendChild(audioEl);
+
+    pc.ontrack = (event) => {
+      console.log("Audio track received");
+      audioEl.srcObject = event.streams[0];
+    };
+
+    localStream.getTracks().forEach(track =>
+      pc.addTrack(track, localStream)
+    );
+
+    dc = pc.createDataChannel("oai-events");
+
+    dc.onopen = () => {
+      console.log("Data channel open");
+
+      dc.send(JSON.stringify({
+        type: "session.update",
+        session: {
+          modalities: ["audio"],
+          voice: "alloy",
+          turn_detection: { type: "server_vad" }
+        }
+      }));
+
+      dc.send(JSON.stringify({
+        type: "response.create",
+        response: {
+          modalities: ["audio"],
+          instructions: "Say hello."
+        }
+      }));
+
+      setStatus("Connected");
+    };
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    const sdpResp = await fetch(
+      "https://api.openai.com/v1/realtime?model=gpt-4o-realtime",
+      {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + tokenJson.token,
+          "Content-Type": "application/sdp"
+        },
+        body: offer.sdp
+      }
+    );
+
+    if (!sdpResp.ok) {
+      console.error(await sdpResp.text());
+      setStatus("SDP error");
+      return;
+    }
+
+    const answer = await sdpResp.text();
+    await pc.setRemoteDescription({ type: "answer", sdp: answer });
+
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("endBtn").disabled = false;
+
+  } catch (err) {
+    console.error(err);
+    setStatus("Error");
   }
+}
 
-  async function endCall() {
+function endCall() {
+  if (dc) dc.close();
+  if (pc) pc.close();
+  if (localStream) localStream.getTracks().forEach(t => t.stop());
+  if (audioEl) audioEl.remove();
 
-    if (dc) dc.close();
-    if (pc) pc.close();
-    if (localStream) localStream.getTracks().forEach(t => t.stop());
-    if (audioEl) audioEl.remove();
+  document.getElementById("startBtn").disabled = false;
+  document.getElementById("endBtn").disabled = true;
+  setStatus("Idle");
+}
 
-    document.getElementById("startBtn").disabled = false;
-    document.getElementById("endBtn").disabled = true;
-
-    setStatus("idle");
-  }
-
-  document.getElementById("startBtn").addEventListener("click", startCall);
-  document.getElementById("endBtn").addEventListener("click", endCall);
-
-});
+document.getElementById("startBtn").onclick = startCall;
+document.getElementById("endBtn").onclick = endCall;
 </script>
 
 </body>

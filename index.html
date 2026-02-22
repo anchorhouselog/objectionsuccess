@@ -25,7 +25,7 @@
   <p id="status" style="margin-top: 14px;">Status: idle</p>
 
 <script>
-const WORKER_URL = "/api/token";
+const WORKER_URL = "/token";
 let pc, dc, localStream, audioEl;
 
 function setStatus(t){ document.getElementById("status").textContent = "Status: " + t; }
@@ -115,5 +115,6 @@ document.getElementById("endBtn").addEventListener("click", endCall);
 </body>
 
 </html>
+
 
 

@@ -15,7 +15,7 @@ export async function onRequestPost(context) {
         body: JSON.stringify({
           model: "gpt-4o-realtime-preview",
           voice: "alloy",
-          instructions: `You are roleplaying a ${leadType} seller.`,
+          instructions: `You are roleplaying a ${leadType} seller. Start the conversation immediately when the call connects.`,
         }),
       }
     );
@@ -43,3 +43,4 @@ export async function onRequestPost(context) {
     );
   }
 }
+

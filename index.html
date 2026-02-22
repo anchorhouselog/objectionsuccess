@@ -1,3 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>ObjectionSuccess</title>
+</head>
+<body style="font-family: system-ui; padding: 30px; max-width: 700px; margin:auto;">
+
+<h2>ObjectionSuccess</h2>
+
+<select id="leadType">
+  <option value="surprise">Surprise me</option>
+  <option value="fsbo">FSBO</option>
+  <option value="expired">Expired</option>
+  <option value="canceled">Canceled</option>
+  <option value="withdrawn">Withdrawn</option>
+</select>
+
+<br><br>
+
+<button id="startBtn">Start Call</button>
+<p id="status">Status: idle</p>
+
 <script>
 document.addEventListener("DOMContentLoaded", function () {
 
@@ -5,18 +28,19 @@ let pc = null;
 let dc = null;
 let audioEl = null;
 
-function setStatus(text) {
-  document.getElementById("status").innerText = "Status: " + text;
+function setStatus(s) {
+  document.getElementById("status").innerText = "Status: " + s;
 }
 
 async function startCall() {
   try {
 
-    setStatus("Getting token...");
-    const tokenResp = await fetch("/token", { method: "POST" });
-    const tokenJson = await tokenResp.json();
+    setStatus("Getting token");
 
-    if (!tokenJson.token) {
+    const tokenResp = await fetch("/token", { method: "POST" });
+    const tokenData = await tokenResp.json();
+
+    if (!tokenData.token) {
       setStatus("Token error");
       return;
     }
@@ -29,7 +53,7 @@ async function startCall() {
     document.body.appendChild(audioEl);
 
     pc.ontrack = function(event) {
-      console.log("TRACK RECEIVED");
+      console.log("Track received");
       audioEl.srcObject = event.streams[0];
     };
 
@@ -37,47 +61,29 @@ async function startCall() {
 
     dc.onmessage = function(event) {
       const msg = JSON.parse(event.data);
-      console.log("SERVER:", msg);
+      console.log("Server:", msg);
 
       if (msg.type === "session.created") {
 
         const scenario = document.getElementById("leadType").value;
 
-        let instructions = "Say hello clearly.";
+        let text = "Say hello clearly.";
 
-        if (scenario === "fsbo")
-          instructions = "You are a skeptical FSBO seller. Start speaking.";
-
-        if (scenario === "expired")
-          instructions = "You are frustrated your listing expired. Start speaking.";
-
-        if (scenario === "canceled")
-          instructions = "You canceled your listing and distrust agents. Start speaking.";
-
-        if (scenario === "withdrawn")
-          instructions = "You withdrew your home and are uncertain. Start speaking.";
-
-        if (scenario === "surprise")
-          instructions = "You are a difficult seller personality. Start speaking.";
+        if (scenario === "fsbo") text = "You are a skeptical FSBO seller. Speak.";
+        if (scenario === "expired") text = "You are frustrated your listing expired. Speak.";
+        if (scenario === "canceled") text = "You distrust agents. Speak.";
+        if (scenario === "withdrawn") text = "You are unsure what to do. Speak.";
+        if (scenario === "surprise") text = "You are a random difficult seller. Speak.";
 
         dc.send(JSON.stringify({
-          type: "session.update",
-          session: {
-            voice: "alloy"
+          type: "response.create",
+          response: {
+            modalities: ["audio"],
+            instructions: text
           }
         }));
 
-        setTimeout(function() {
-          dc.send(JSON.stringify({
-            type: "response.create",
-            response: {
-              modalities: ["audio"],
-              instructions: instructions
-            }
-          }));
-        }, 500);
-
-        setStatus("Speaking...");
+        setStatus("Speaking");
       }
     };
 
@@ -89,7 +95,7 @@ async function startCall() {
       {
         method: "POST",
         headers: {
-          Authorization: "Bearer " + tokenJson.token,
+          Authorization: "Bearer " + tokenData.token,
           "Content-Type": "application/sdp"
         },
         body: offer.sdp
@@ -99,30 +105,18 @@ async function startCall() {
     const answer = await sdpResp.text();
     await pc.setRemoteDescription({ type: "answer", sdp: answer });
 
-    document.getElementById("startBtn").disabled = true;
-    document.getElementById("endBtn").disabled = false;
-
     setStatus("Connected");
 
-  } catch (err) {
-    console.error(err);
+  } catch (e) {
+    console.error(e);
     setStatus("Error");
   }
 }
 
-function endCall() {
-  if (dc) dc.close();
-  if (pc) pc.close();
-  if (audioEl) audioEl.remove();
-
-  document.getElementById("startBtn").disabled = false;
-  document.getElementById("endBtn").disabled = true;
-
-  setStatus("Idle");
-}
-
 document.getElementById("startBtn").onclick = startCall;
-document.getElementById("endBtn").onclick = endCall;
 
 });
 </script>
+
+</body>
+</html>

@@ -1,23 +1,53 @@
-<script>
-let pc;
-let dc;
-let localStream;
-let audioEl;
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>ObjectionSuccess</title>
+</head>
 
-function setStatus(t) {
-  document.getElementById("status").textContent = "Status: " + t;
+<body style="font-family: system-ui; padding: 30px; max-width: 720px; margin:auto;">
+
+<h2>ObjectionSuccess (Private Beta)</h2>
+
+<label>Scenario:</label>
+<select id="leadType">
+  <option value="surprise">Surprise me</option>
+  <option value="fsbo">FSBO</option>
+  <option value="expired">Expired</option>
+  <option value="canceled">Canceled</option>
+  <option value="withdrawn">Withdrawn</option>
+</select>
+
+<br><br>
+
+<button id="startBtn">Start Call</button>
+<button id="endBtn" disabled>End Call</button>
+
+<p id="status">Status: idle</p>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+let pc = null;
+let dc = null;
+let localStream = null;
+let audioEl = null;
+
+function setStatus(text) {
+  document.getElementById("status").innerText = "Status: " + text;
 }
 
 async function startCall() {
   try {
+
     setStatus("Requesting mic...");
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
     setStatus("Getting token...");
     const tokenResp = await fetch("/token", { method: "POST" });
-    const { token } = await tokenResp.json();
+    const tokenJson = await tokenResp.json();
 
-    if (!token) {
+    if (!tokenJson.token) {
       setStatus("Token error");
       return;
     }
@@ -29,28 +59,20 @@ async function startCall() {
     audioEl.controls = true;
     document.body.appendChild(audioEl);
 
-    pc.ontrack = (event) => {
+    pc.ontrack = function(event) {
       console.log("TRACK RECEIVED");
       audioEl.srcObject = event.streams[0];
     };
 
-    localStream.getTracks().forEach(track =>
-      pc.addTrack(track, localStream)
-    );
+    localStream.getTracks().forEach(function(track) {
+      pc.addTrack(track, localStream);
+    });
 
     dc = pc.createDataChannel("oai-events");
 
-    dc.onopen = () => {
-      console.log("Data channel open");
-    };
-
-    dc.onmessage = (event) => {
+    dc.onmessage = function(event) {
       const msg = JSON.parse(event.data);
-      console.log("SERVER FULL MESSAGE:", msg);
-
-      if (msg.type === "error") {
-        console.error("SERVER ERROR:", msg);
-      }
+      console.log("SERVER:", msg);
 
       if (msg.type === "session.created") {
 
@@ -59,21 +81,20 @@ async function startCall() {
         let instructions = "Say hello clearly.";
 
         if (scenario === "fsbo")
-          instructions = "You are a skeptical homeowner selling FSBO. Start the call.";
+          instructions = "You are a skeptical homeowner selling FSBO. Start speaking.";
 
         if (scenario === "expired")
-          instructions = "You are frustrated your listing expired. Start the call.";
+          instructions = "You are frustrated your listing expired. Start speaking.";
 
         if (scenario === "canceled")
-          instructions = "You canceled your listing and distrust agents. Start the call.";
+          instructions = "You canceled your listing and distrust agents. Start speaking.";
 
         if (scenario === "withdrawn")
-          instructions = "You withdrew your home and are uncertain. Start the call.";
+          instructions = "You withdrew your home and are uncertain. Start speaking.";
 
         if (scenario === "surprise")
-          instructions = "You are a difficult random seller personality. Start the call.";
+          instructions = "You are a difficult seller personality. Start speaking.";
 
-        // Minimal clean session config
         dc.send(JSON.stringify({
           type: "session.update",
           session: {
@@ -82,7 +103,7 @@ async function startCall() {
           }
         }));
 
-        setTimeout(() => {
+        setTimeout(function() {
           dc.send(JSON.stringify({
             type: "response.create",
             response: {
@@ -104,7 +125,7 @@ async function startCall() {
       {
         method: "POST",
         headers: {
-          Authorization: "Bearer " + token,
+          Authorization: "Bearer " + tokenJson.token,
           "Content-Type": "application/sdp"
         },
         body: offer.sdp
@@ -139,4 +160,9 @@ function endCall() {
 
 document.getElementById("startBtn").onclick = startCall;
 document.getElementById("endBtn").onclick = endCall;
+
+});
 </script>
+
+</body>
+</html>

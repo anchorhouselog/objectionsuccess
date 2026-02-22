@@ -1,17 +1,20 @@
 <script>
 const WORKER_URL = "/token";
 
-let pc, dc, localStream, audioEl;
+let pc = null;
+let dc = null;
+let localStream = null;
+let audioEl = null;
 
 function setStatus(t) {
-  document.getElementById("status").textContent = "Status: " + t;
+  const status = document.getElementById("status");
+  if (status) status.textContent = "Status: " + t;
 }
 
 async function startCall() {
   try {
     setStatus("Requesting microphone…");
 
-    // Get mic
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
     setStatus("Getting token…");
@@ -28,7 +31,7 @@ async function startCall() {
 
     if (!tokenResp.ok || !tokenJson.token) {
       console.error("Token error:", tokenJson);
-      setStatus("Token error (check backend).");
+      setStatus("Token error (backend issue).");
       return;
     }
 
@@ -36,20 +39,20 @@ async function startCall() {
 
     pc = new RTCPeerConnection();
 
-    // Create audio output element
+    // Create audio element safely
     audioEl = document.createElement("audio");
     audioEl.autoplay = true;
     audioEl.playsInline = true;
     audioEl.muted = false;
+    audioEl.volume = 1;
     document.body.appendChild(audioEl);
 
-    // When remote audio arrives
     pc.ontrack = async (event) => {
       audioEl.srcObject = event.streams[0];
 
       try {
         await audioEl.play();
-        console.log("Audio playing");
+        console.log("Audio playback started");
       } catch (err) {
         console.error("Playback blocked:", err);
       }
@@ -60,13 +63,13 @@ async function startCall() {
       pc.addTrack(track, localStream)
     );
 
-    // Create data channel
+    // Data channel
     dc = pc.createDataChannel("oai-events");
 
     dc.onopen = () => {
       setStatus("Connected.");
 
-      // Enable automatic turn detection
+      // Enable server VAD
       dc.send(JSON.stringify({
         type: "session.update",
         session: {
@@ -74,7 +77,7 @@ async function startCall() {
         }
       }));
 
-      // Force AI to start conversation
+      // Force AI to speak first
       dc.send(JSON.stringify({
         type: "response.create",
         response: {
@@ -92,7 +95,7 @@ async function startCall() {
       }
 
       if (msg.type === "response.completed") {
-        console.log("Response finished");
+        console.log("AI finished speaking");
       }
     };
 
@@ -101,17 +104,17 @@ async function startCall() {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    const realtimeUrl =
-      "https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview";
-
-    const sdpResp = await fetch(realtimeUrl, {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer " + EPHEMERAL_TOKEN,
-        "Content-Type": "application/sdp"
-      },
-      body: offer.sdp
-    });
+    const sdpResp = await fetch(
+      "https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview",
+      {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + EPHEMERAL_TOKEN,
+          "Content-Type": "application/sdp"
+        },
+        body: offer.sdp
+      }
+    );
 
     const answerSdp = await sdpResp.text();
 
@@ -124,7 +127,7 @@ async function startCall() {
     document.getElementById("endBtn").disabled = false;
 
   } catch (err) {
-    console.error(err);
+    console.error("Start call error:", err);
     setStatus("Mic blocked or connection failed.");
   }
 }
@@ -151,6 +154,12 @@ async function endCall() {
   setStatus("idle");
 }
 
-document.getElementById("startBtn").addEventListener("click", startCall);
-document.getElementById("endBtn").addEventListener("click", endCall);
+// 🔥 Prevent blank page crash
+window.addEventListener("DOMContentLoaded", () => {
+  const startBtn = document.getElementById("startBtn");
+  const endBtn = document.getElementById("endBtn");
+
+  if (startBtn) startBtn.addEventListener("click", startCall);
+  if (endBtn) endBtn.addEventListener("click", endCall);
+});
 </script>

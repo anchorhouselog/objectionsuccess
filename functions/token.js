@@ -1,7 +1,9 @@
 export async function onRequestPost(context) {
-  const { env } = context;
+  const { request, env } = context;
 
   try {
+    const { leadType } = await request.json();
+
     const response = await fetch(
       "https://api.openai.com/v1/realtime/sessions",
       {
@@ -12,21 +14,32 @@ export async function onRequestPost(context) {
         },
         body: JSON.stringify({
           model: "gpt-4o-realtime-preview",
-          voice: "alloy"
+          voice: "alloy",
+          instructions: `You are roleplaying a ${leadType} seller.`,
         }),
       }
     );
 
-    const text = await response.text();
+    const data = await response.json();
 
-    return new Response(text, {
-      headers: { "Content-Type": "application/json" },
-    });
+    const ephemeral = data?.client_secret?.value;
+
+    if (!ephemeral) {
+      return new Response(
+        JSON.stringify({ error: data }),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    return new Response(
+      JSON.stringify({ token: ephemeral }),
+      { headers: { "Content-Type": "application/json" } }
+    );
 
   } catch (err) {
     return new Response(
       JSON.stringify({ error: String(err) }),
-      { headers: { "Content-Type": "application/json" } }
+      { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 }

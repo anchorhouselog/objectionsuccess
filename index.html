@@ -16,8 +16,6 @@
 <p id="status">Status: idle</p>
 
 <script>
-const WORKER_URL = "/token";
-
 let pc;
 let dc;
 let localStream;
@@ -33,14 +31,20 @@ async function startCall() {
     localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
     setStatus("Getting token...");
-    const tokenResp = await fetch(WORKER_URL, { method: "POST" });
-    const tokenJson = await tokenResp.json();
 
-    if (!tokenJson.token) {
-      console.error(tokenJson);
+    const tokenResp = await fetch("/token", {
+      method: "POST"
+    });
+
+    if (!tokenResp.ok) {
+      const errText = await tokenResp.text();
+      console.error("Token error:", errText);
       setStatus("Token error");
       return;
     }
+
+    const tokenJson = await tokenResp.json();
+    const EPHEMERAL_TOKEN = tokenJson.token;
 
     pc = new RTCPeerConnection();
 
@@ -90,7 +94,7 @@ async function startCall() {
       {
         method: "POST",
         headers: {
-          Authorization: "Bearer " + tokenJson.token,
+          Authorization: "Bearer " + EPHEMERAL_TOKEN,
           "Content-Type": "application/sdp"
         },
         body: offer.sdp
@@ -98,7 +102,8 @@ async function startCall() {
     );
 
     if (!sdpResp.ok) {
-      console.error(await sdpResp.text());
+      const errText = await sdpResp.text();
+      console.error("SDP error:", errText);
       setStatus("SDP error");
       return;
     }

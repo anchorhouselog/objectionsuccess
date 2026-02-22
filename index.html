@@ -48,7 +48,6 @@ async function startCall() {
 
     pc = new RTCPeerConnection();
 
-    // Required: ensure audio media section exists
     pc.addTransceiver("audio", { direction: "recvonly" });
 
     audioEl = document.createElement("audio");
@@ -69,12 +68,13 @@ async function startCall() {
 
       if (msg.type === "session.created") {
 
-        // 🔥 Enable audio output at session level
+        // 🔥 FULL AUDIO CONFIGURATION
         dc.send(JSON.stringify({
           type: "session.update",
           session: {
             modalities: ["audio", "text"],
-            voice: "alloy"
+            voice: "alloy",
+            output_audio_format: "pcm16"
           }
         }));
 

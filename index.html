@@ -71,7 +71,7 @@ async function startCall() {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    const realtimeUrl = "https://api.openai.com/v1/realtime?model=gpt-realtime";
+    const realtimeUrl = "https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview";
     const sdpResp = await fetch(realtimeUrl, {
       method: "POST",
       headers: {
@@ -115,4 +115,5 @@ document.getElementById("endBtn").addEventListener("click", endCall);
 </body>
 
 </html>
+
 

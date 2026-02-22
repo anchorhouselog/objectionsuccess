@@ -18,29 +18,30 @@
 
 <br><br>
 
-<button id="startBtn">Start Call</button>
+<button onclick="startCall()">Start Call</button>
+
 <p id="status">Status: idle</p>
 
 <script>
-document.addEventListener("DOMContentLoaded", function () {
 
-let pc = null;
-let dc = null;
-let audioEl = null;
+let pc;
+let dc;
+let audioEl;
 
-function setStatus(s) {
-  document.getElementById("status").innerText = "Status: " + s;
+function setStatus(text) {
+  document.getElementById("status").innerText = "Status: " + text;
 }
 
 async function startCall() {
   try {
 
-    setStatus("Getting token");
+    setStatus("Getting token...");
 
     const tokenResp = await fetch("/token", { method: "POST" });
     const tokenData = await tokenResp.json();
 
     if (!tokenData.token) {
+      console.error("Token response:", tokenData);
       setStatus("Token error");
       return;
     }
@@ -52,38 +53,47 @@ async function startCall() {
     audioEl.controls = true;
     document.body.appendChild(audioEl);
 
-    pc.ontrack = function(event) {
-      console.log("Track received");
+    pc.ontrack = (event) => {
+      console.log("TRACK RECEIVED");
       audioEl.srcObject = event.streams[0];
     };
 
     dc = pc.createDataChannel("oai-events");
 
-    dc.onmessage = function(event) {
+    dc.onmessage = (event) => {
       const msg = JSON.parse(event.data);
-      console.log("Server:", msg);
+      console.log("SERVER:", msg);
 
       if (msg.type === "session.created") {
 
         const scenario = document.getElementById("leadType").value;
 
-        let text = "Say hello clearly.";
+        let instructions = "Say hello clearly.";
 
-        if (scenario === "fsbo") text = "You are a skeptical FSBO seller. Speak.";
-        if (scenario === "expired") text = "You are frustrated your listing expired. Speak.";
-        if (scenario === "canceled") text = "You distrust agents. Speak.";
-        if (scenario === "withdrawn") text = "You are unsure what to do. Speak.";
-        if (scenario === "surprise") text = "You are a random difficult seller. Speak.";
+        if (scenario === "fsbo")
+          instructions = "You are a skeptical FSBO seller. Speak.";
+
+        if (scenario === "expired")
+          instructions = "You are frustrated your listing expired. Speak.";
+
+        if (scenario === "canceled")
+          instructions = "You distrust agents. Speak.";
+
+        if (scenario === "withdrawn")
+          instructions = "You are unsure what to do. Speak.";
+
+        if (scenario === "surprise")
+          instructions = "You are a difficult seller personality. Speak.";
 
         dc.send(JSON.stringify({
           type: "response.create",
           response: {
             modalities: ["audio"],
-            instructions: text
+            instructions: instructions
           }
         }));
 
-        setStatus("Speaking");
+        setStatus("Speaking...");
       }
     };
 
@@ -102,6 +112,13 @@ async function startCall() {
       }
     );
 
+    if (!sdpResp.ok) {
+      const errText = await sdpResp.text();
+      console.error("Realtime error:", errText);
+      setStatus("Realtime error");
+      return;
+    }
+
     const answer = await sdpResp.text();
     await pc.setRemoteDescription({ type: "answer", sdp: answer });
 
@@ -113,9 +130,6 @@ async function startCall() {
   }
 }
 
-document.getElementById("startBtn").onclick = startCall;
-
-});
 </script>
 
 </body>

@@ -1,30 +1,36 @@
-export async function onRequestPost(context) {
-  const { request, env } = context;
+import express from "express";
+import fetch from "node-fetch";
 
-  const { leadType } = await request.json();
+const app = express();
+app.use(express.json());
 
-  const response = await fetch(
-    "https://api.openai.com/v1/realtime/sessions",
-    {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-     body: JSON.stringify({
-  model: "gpt-4o-realtime-preview",
-  voice: "alloy",
-  modalities: ["audio", "text"],
-  instructions: `You are roleplaying a ${leadType} seller. Respond conversationally in voice.`
-}),
-    }
-  );
+app.post("/token", async (req, res) => {
+  try {
+    const response = await fetch(
+      "https://api.openai.com/v1/realtime/sessions",
+      {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-realtime",
+          voice: "alloy"
+        })
+      }
+    );
 
-  const data = await response.json();
+    const data = await response.json();
 
-  return new Response(
-    JSON.stringify({ token: data.client_secret.value }),
-    { headers: { "Content-Type": "application/json" } }
-  );
-}
+    res.json({
+      token: data.client_secret.value
+    });
 
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Token generation failed" });
+  }
+});
+
+app.listen(3000, () => console.log("Server running"));

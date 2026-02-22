@@ -1,36 +1,8 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <title>ObjectionSuccess</title>
-</head>
-
-<body style="font-family: system-ui; padding: 30px; max-width: 720px; margin:auto;">
-
-<h2>ObjectionSuccess (Private Beta)</h2>
-
-<label>Scenario:</label>
-<select id="leadType">
-  <option value="surprise">Surprise me</option>
-  <option value="fsbo">FSBO</option>
-  <option value="expired">Expired</option>
-  <option value="canceled">Canceled</option>
-  <option value="withdrawn">Withdrawn</option>
-</select>
-
-<br><br>
-
-<button id="startBtn">Start Call</button>
-<button id="endBtn" disabled>End Call</button>
-
-<p id="status">Status: idle</p>
-
 <script>
 document.addEventListener("DOMContentLoaded", function () {
 
 let pc = null;
 let dc = null;
-let localStream = null;
 let audioEl = null;
 
 function setStatus(text) {
@@ -39,9 +11,6 @@ function setStatus(text) {
 
 async function startCall() {
   try {
-
-    setStatus("Requesting mic...");
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
     setStatus("Getting token...");
     const tokenResp = await fetch("/token", { method: "POST" });
@@ -64,10 +33,6 @@ async function startCall() {
       audioEl.srcObject = event.streams[0];
     };
 
-    localStream.getTracks().forEach(function(track) {
-      pc.addTrack(track, localStream);
-    });
-
     dc = pc.createDataChannel("oai-events");
 
     dc.onmessage = function(event) {
@@ -81,7 +46,7 @@ async function startCall() {
         let instructions = "Say hello clearly.";
 
         if (scenario === "fsbo")
-          instructions = "You are a skeptical homeowner selling FSBO. Start speaking.";
+          instructions = "You are a skeptical FSBO seller. Start speaking.";
 
         if (scenario === "expired")
           instructions = "You are frustrated your listing expired. Start speaking.";
@@ -98,8 +63,7 @@ async function startCall() {
         dc.send(JSON.stringify({
           type: "session.update",
           session: {
-            voice: "alloy",
-            turn_detection: { type: "server_vad" }
+            voice: "alloy"
           }
         }));
 
@@ -149,7 +113,6 @@ async function startCall() {
 function endCall() {
   if (dc) dc.close();
   if (pc) pc.close();
-  if (localStream) localStream.getTracks().forEach(t => t.stop());
   if (audioEl) audioEl.remove();
 
   document.getElementById("startBtn").disabled = false;
@@ -163,6 +126,3 @@ document.getElementById("endBtn").onclick = endCall;
 
 });
 </script>
-
-</body>
-</html>

@@ -1,37 +1,8 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <title>ObjectionSuccess</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-</head>
-
-<body style="font-family: system-ui; padding: 30px; max-width: 720px; margin:auto;">
-
-<h2>ObjectionSuccess (Private Beta)</h2>
-
-<label for="leadType">Scenario:</label>
-<select id="leadType">
-  <option value="surprise">Surprise me</option>
-  <option value="fsbo">FSBO</option>
-  <option value="expired">Expired</option>
-  <option value="canceled">Canceled</option>
-  <option value="withdrawn">Withdrawn</option>
-</select>
-
-<div style="margin-top:16px;">
-  <button id="startBtn">📞 Start Call</button>
-  <button id="endBtn" disabled>⛔ End Call</button>
-</div>
-
-<p id="status">Status: idle</p>
-
 <script>
 let pc;
 let dc;
 let localStream;
 let audioEl;
-let sessionReady = false;
 
 function setStatus(t) {
   document.getElementById("status").textContent = "Status: " + t;
@@ -55,7 +26,7 @@ async function startCall() {
 
     audioEl = document.createElement("audio");
     audioEl.autoplay = true;
-    audioEl.controls = true; // prevents autoplay blocking
+    audioEl.controls = true;
     document.body.appendChild(audioEl);
 
     pc.ontrack = (event) => {
@@ -75,15 +46,53 @@ async function startCall() {
 
     dc.onmessage = (event) => {
       const msg = JSON.parse(event.data);
-      console.log("SERVER:", msg.type);
+      console.log("SERVER FULL MESSAGE:", msg);
 
-      if (msg.type === "session.created") {
-        sessionReady = true;
-        configureAndSpeak();
+      if (msg.type === "error") {
+        console.error("SERVER ERROR:", msg);
       }
 
-      if (msg.type === "response.output_audio.delta") {
-        console.log("Audio chunk received");
+      if (msg.type === "session.created") {
+
+        const scenario = document.getElementById("leadType").value;
+
+        let instructions = "Say hello clearly.";
+
+        if (scenario === "fsbo")
+          instructions = "You are a skeptical homeowner selling FSBO. Start the call.";
+
+        if (scenario === "expired")
+          instructions = "You are frustrated your listing expired. Start the call.";
+
+        if (scenario === "canceled")
+          instructions = "You canceled your listing and distrust agents. Start the call.";
+
+        if (scenario === "withdrawn")
+          instructions = "You withdrew your home and are uncertain. Start the call.";
+
+        if (scenario === "surprise")
+          instructions = "You are a difficult random seller personality. Start the call.";
+
+        // Minimal clean session config
+        dc.send(JSON.stringify({
+          type: "session.update",
+          session: {
+            voice: "alloy",
+            turn_detection: { type: "server_vad" }
+          }
+        }));
+
+        setTimeout(() => {
+          dc.send(JSON.stringify({
+            type: "response.create",
+            response: {
+              modalities: ["audio"],
+              instructions: instructions
+            }
+          }));
+        }, 500);
+
+        setStatus("Speaking...");
       }
     };
 
@@ -116,54 +125,6 @@ async function startCall() {
   }
 }
 
-function configureAndSpeak() {
-  if (!sessionReady) return;
-
-  const scenario = document.getElementById("leadType").value;
-
-  let instructions = "Say hello clearly in audio.";
-
-  if (scenario === "fsbo")
-    instructions = "You are a skeptical homeowner selling FSBO. Start speaking immediately.";
-
-  if (scenario === "expired")
-    instructions = "You are frustrated your listing expired. Start speaking immediately.";
-
-  if (scenario === "canceled")
-    instructions = "You canceled your listing and distrust agents. Start speaking immediately.";
-
-  if (scenario === "withdrawn")
-    instructions = "You withdrew your home and are uncertain. Start speaking immediately.";
-
-  if (scenario === "surprise")
-    instructions = "You are a difficult random seller personality. Start speaking immediately.";
-
-  // Configure session FIRST
-  dc.send(JSON.stringify({
-    type: "session.update",
-    session: {
-      modalities: ["audio"],
-      output_modalities: ["audio"],
-      voice: "alloy",
-      output_audio_format: "pcm16",
-      turn_detection: { type: "server_vad" }
-    }
-  }));
-
-  // Wait slightly to avoid race condition
-  setTimeout(() => {
-    dc.send(JSON.stringify({
-      type: "response.create",
-      response: {
-        modalities: ["audio"],
-        instructions: instructions
-      }
-    }));
-  }, 600);
-
-  setStatus("Speaking...");
-}
-
 function endCall() {
   if (dc) dc.close();
   if (pc) pc.close();
@@ -179,6 +140,3 @@ function endCall() {
 document.getElementById("startBtn").onclick = startCall;
 document.getElementById("endBtn").onclick = endCall;
 </script>
-
-</body>
-</html>

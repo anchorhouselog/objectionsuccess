@@ -2,11 +2,11 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>ObjectionSuccess (PCM)</title>
+  <title>ObjectionSuccess (Clean Audio)</title>
 </head>
 <body style="font-family: system-ui; padding: 30px; max-width: 700px; margin:auto;">
 
-<h2>ObjectionSuccess (Stable PCM Mode)</h2>
+<h2>ObjectionSuccess</h2>
 
 <select id="leadType">
   <option value="surprise">Surprise me</option>
@@ -19,27 +19,25 @@
 <br><br>
 
 <button onclick="startCall()">Start Call</button>
-
 <p id="status">Status: idle</p>
 
 <script>
 
 let pc;
 let dc;
-let audioCtx = null;
-let nextPlayTime = 0;
+let audioCtx;
+let nextTime = 0;
 
-function setStatus(text) {
-  document.getElementById("status").innerText = "Status: " + text;
+function setStatus(t) {
+  document.getElementById("status").innerText = "Status: " + t;
 }
 
 function base64ToFloat32(base64) {
   const binary = atob(base64);
-  const len = binary.length;
-  const buffer = new ArrayBuffer(len);
+  const buffer = new ArrayBuffer(binary.length);
   const view = new Uint8Array(buffer);
 
-  for (let i = 0; i < len; i++) {
+  for (let i = 0; i < binary.length; i++) {
     view[i] = binary.charCodeAt(i);
   }
 
@@ -65,12 +63,12 @@ function playPCM(float32) {
   source.buffer = buffer;
   source.connect(audioCtx.destination);
 
-  if (nextPlayTime < audioCtx.currentTime) {
-    nextPlayTime = audioCtx.currentTime;
+  if (nextTime < audioCtx.currentTime) {
+    nextTime = audioCtx.currentTime;
   }
 
-  source.start(nextPlayTime);
-  nextPlayTime += buffer.duration;
+  source.start(nextTime);
+  nextTime += buffer.duration;
 }
 
 async function startCall() {
@@ -82,29 +80,33 @@ async function startCall() {
     const tokenData = await tokenResp.json();
 
     if (!tokenData.token) {
-      console.error("Token error:", tokenData);
+      console.error(tokenData);
       setStatus("Token error");
       return;
     }
 
     pc = new RTCPeerConnection();
-
-    // Required so offer contains audio section
     pc.addTransceiver("audio", { direction: "recvonly" });
 
     dc = pc.createDataChannel("oai-events");
 
     dc.onmessage = (event) => {
       const msg = JSON.parse(event.data);
+
+      if (msg.type === "error") {
+        console.error("SERVER ERROR:", msg.error);
+        setStatus("Server error");
+        return;
+      }
+
       console.log("SERVER:", msg);
 
       if (msg.type === "session.created") {
 
-        // Enable audio system
+        // Enable voice system ONLY
         dc.send(JSON.stringify({
           type: "session.update",
           session: {
-            modalities: ["audio", "text"],
             voice: "alloy"
           }
         }));
@@ -126,8 +128,7 @@ async function startCall() {
               modalities: ["audio", "text"],
               instructions: text,
               audio: {
-                voice: "alloy",
-                format: "pcm16"
+                voice: "alloy"
               }
             }
           }));
@@ -136,7 +137,6 @@ async function startCall() {
         setStatus("Speaking...");
       }
 
-      // 🔥 THIS IS WHAT WE WANT
       if (msg.type === "response.output_audio.delta") {
         const float32 = base64ToFloat32(msg.delta);
         playPCM(float32);

@@ -1,165 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>ObjectionSuccess</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+
+<body style="font-family: system-ui; padding: 30px; max-width: 720px; margin:auto;">
+
+  <h2>ObjectionSuccess (Private Beta)</h2>
+
+  <label for="leadType">Scenario:</label>
+  <select id="leadType">
+    <option value="surprise">Surprise me</option>
+    <option value="fsbo">FSBO</option>
+    <option value="expired">Expired</option>
+    <option value="canceled">Canceled</option>
+    <option value="withdrawn">Withdrawn</option>
+  </select>
+
+  <div style="margin-top:16px;">
+    <button id="startBtn">📞 Start Call</button>
+    <button id="endBtn" disabled>⛔ End Call</button>
+  </div>
+
+  <p id="status" style="margin-top:14px;">Status: idle</p>
+
 <script>
-const WORKER_URL = "/token";
-
-let pc = null;
-let dc = null;
-let localStream = null;
-let audioEl = null;
-
-function setStatus(t) {
-  const status = document.getElementById("status");
-  if (status) status.textContent = "Status: " + t;
-}
-
-async function startCall() {
-  try {
-    setStatus("Requesting microphone…");
-
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-    setStatus("Getting token…");
-
-    const leadType = document.getElementById("leadType").value;
-
-    const tokenResp = await fetch(WORKER_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leadType })
-    });
-
-    const tokenJson = await tokenResp.json();
-
-    if (!tokenResp.ok || !tokenJson.token) {
-      console.error("Token error:", tokenJson);
-      setStatus("Token error (backend issue).");
-      return;
-    }
-
-    const EPHEMERAL_TOKEN = tokenJson.token;
-
-    pc = new RTCPeerConnection();
-
-    // Create audio element safely
-    audioEl = document.createElement("audio");
-    audioEl.autoplay = true;
-    audioEl.playsInline = true;
-    audioEl.muted = false;
-    audioEl.volume = 1;
-    document.body.appendChild(audioEl);
-
-    pc.ontrack = async (event) => {
-      audioEl.srcObject = event.streams[0];
-
-      try {
-        await audioEl.play();
-        console.log("Audio playback started");
-      } catch (err) {
-        console.error("Playback blocked:", err);
-      }
-    };
-
-    // Add mic track
-    localStream.getTracks().forEach(track =>
-      pc.addTrack(track, localStream)
-    );
-
-    // Data channel
-    dc = pc.createDataChannel("oai-events");
-
-    dc.onopen = () => {
-      setStatus("Connected.");
-
-      // Enable server VAD
-      dc.send(JSON.stringify({
-        type: "session.update",
-        session: {
-          turn_detection: { type: "server_vad" }
-        }
-      }));
-
-      // Force AI to speak first
-      dc.send(JSON.stringify({
-        type: "response.create",
-        response: {
-          modalities: ["audio", "text"],
-          instructions: "Start the conversation by saying hello and introducing yourself."
-        }
-      }));
-    };
-
-    dc.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
-
-      if (msg.type === "response.output_text.delta") {
-        console.log("AI text:", msg.delta);
-      }
-
-      if (msg.type === "response.completed") {
-        console.log("AI finished speaking");
-      }
-    };
-
-    setStatus("Connecting…");
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    const sdpResp = await fetch(
-      "https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview",
-      {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + EPHEMERAL_TOKEN,
-          "Content-Type": "application/sdp"
-        },
-        body: offer.sdp
-      }
-    );
-
-    const answerSdp = await sdpResp.text();
-
-    await pc.setRemoteDescription({
-      type: "answer",
-      sdp: answerSdp
-    });
-
-    document.getElementById("startBtn").disabled = true;
-    document.getElementById("endBtn").disabled = false;
-
-  } catch (err) {
-    console.error("Start call error:", err);
-    setStatus("Mic blocked or connection failed.");
-  }
-}
-
-async function endCall() {
-  setStatus("Ending…");
-
-  try {
-    if (dc && dc.readyState === "open") dc.close();
-    if (pc) pc.close();
-    if (localStream)
-      localStream.getTracks().forEach(t => t.stop());
-    if (audioEl) audioEl.remove();
-  } catch (e) {}
-
-  pc = null;
-  dc = null;
-  localStream = null;
-  audioEl = null;
-
-  document.getElementById("startBtn").disabled = false;
-  document.getElementById("endBtn").disabled = true;
-
-  setStatus("idle");
-}
-
-// 🔥 Prevent blank page crash
 window.addEventListener("DOMContentLoaded", () => {
-  const startBtn = document.getElementById("startBtn");
-  const endBtn = document.getElementById("endBtn");
 
-  if (startBtn) startBtn.addEventListener("click", startCall);
-  if (endBtn) endBtn.addEventListener("click", endCall);
+  const WORKER_URL = "/token";
+
+  let pc = null;
+  let dc = null;
+  let localStream = null;
+  let audioEl = null;
+
+  function setStatus(t) {
+    document.getElementById("status").textContent = "Status: " + t;
+  }
+
+  async function startCall() {
+    try {
+      setStatus("Requesting microphone…");
+
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      setStatus("Getting token…");
+
+      const leadType = document.getElementById("leadType").value;
+
+      const tokenResp = await fetch(WORKER_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadType })
+      });
+
+      const tokenJson = await tokenResp.json();
+
+      if (!tokenResp.ok || !tokenJson.token) {
+        console.error(tokenJson);
+        setStatus("Token error");
+        return;
+      }
+
+      const EPHEMERAL_TOKEN = tokenJson.token;
+
+      pc = new RTCPeerConnection();
+
+      audioEl = document.createElement("audio");
+      audioEl.autoplay = true;
+      audioEl.playsInline = true;
+      document.body.appendChild(audioEl);
+
+      pc.ontrack = async (event) => {
+        audioEl.srcObject = event.streams[0];
+        await audioEl.play();
+      };
+
+      localStream.getTracks().forEach(track =>
+        pc.addTrack(track, localStream)
+      );
+
+      dc = pc.createDataChannel("oai-events");
+
+      dc.onopen = () => {
+        setStatus("Connected.");
+
+        dc.send(JSON.stringify({
+          type: "session.update",
+          session: {
+            turn_detection: { type: "server_vad" }
+          }
+        }));
+
+        dc.send(JSON.stringify({
+          type: "response.create",
+          response: {
+            modalities: ["audio"],
+            instructions: "Say hello."
+          }
+        }));
+      };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const sdpResp = await fetch(
+        "https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview",
+        {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer " + EPHEMERAL_TOKEN,
+            "Content-Type": "application/sdp"
+          },
+          body: offer.sdp
+        }
+      );
+
+      const answerSdp = await sdpResp.text();
+      await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+
+      document.getElementById("startBtn").disabled = true;
+      document.getElementById("endBtn").disabled = false;
+
+    } catch (err) {
+      console.error(err);
+      setStatus("Error starting call");
+    }
+  }
+
+  async function endCall() {
+    if (dc) dc.close();
+    if (pc) pc.close();
+    if (localStream) localStream.getTracks().forEach(t => t.stop());
+    if (audioEl) audioEl.remove();
+
+    document.getElementById("startBtn").disabled = false;
+    document.getElementById("endBtn").disabled = true;
+
+    setStatus("idle");
+  }
+
+  document.getElementById("startBtn").addEventListener("click", startCall);
+  document.getElementById("endBtn").addEventListener("click", endCall);
+
 });
 </script>
+
+</body>
+</html>

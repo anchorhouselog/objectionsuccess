@@ -11,12 +11,12 @@ export async function onRequestPost(context) {
         "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: "gpt-4o-realtime-preview",
-        voice: "alloy",
-        modalities: ["audio", "text"],
-        instructions: `You are roleplaying a ${leadType} seller. Respond conversationally in voice.`
-      }),
+     body: JSON.stringify({
+  model: "gpt-4o-realtime-preview",
+  voice: "alloy",
+  modalities: ["audio", "text"],
+  instructions: `You are roleplaying a ${leadType} seller. Respond conversationally in voice.`
+}),
     }
   );
 
@@ -27,3 +27,4 @@ export async function onRequestPost(context) {
     { headers: { "Content-Type": "application/json" } }
   );
 }
+

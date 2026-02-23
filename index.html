@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8" />
-  <title>ObjectionSuccess (Clean Audio)</title>
+  <title>ObjectionSuccess (Stable)</title>
 </head>
 <body style="font-family: system-ui; padding: 30px; max-width: 700px; margin:auto;">
 
@@ -19,160 +19,43 @@
 <br><br>
 
 <button onclick="startCall()">Start Call</button>
+
 <p id="status">Status: idle</p>
 
 <script>
 
-let pc;
-let dc;
-let audioCtx;
-let nextTime = 0;
-
-function setStatus(t) {
-  document.getElementById("status").innerText = "Status: " + t;
-}
-
-function base64ToFloat32(base64) {
-  const binary = atob(base64);
-  const buffer = new ArrayBuffer(binary.length);
-  const view = new Uint8Array(buffer);
-
-  for (let i = 0; i < binary.length; i++) {
-    view[i] = binary.charCodeAt(i);
-  }
-
-  const pcm = new Int16Array(buffer);
-  const float32 = new Float32Array(pcm.length);
-
-  for (let i = 0; i < pcm.length; i++) {
-    float32[i] = pcm[i] / 32768;
-  }
-
-  return float32;
-}
-
-function playPCM(float32) {
-  if (!audioCtx) {
-    audioCtx = new AudioContext({ sampleRate: 24000 });
-  }
-
-  const buffer = audioCtx.createBuffer(1, float32.length, 24000);
-  buffer.copyToChannel(float32, 0);
-
-  const source = audioCtx.createBufferSource();
-  source.buffer = buffer;
-  source.connect(audioCtx.destination);
-
-  if (nextTime < audioCtx.currentTime) {
-    nextTime = audioCtx.currentTime;
-  }
-
-  source.start(nextTime);
-  nextTime += buffer.duration;
+function setStatus(text) {
+  document.getElementById("status").innerText = "Status: " + text;
 }
 
 async function startCall() {
   try {
 
-    setStatus("Getting token...");
+    setStatus("Requesting audio...");
 
-    const tokenResp = await fetch("/token", { method: "POST" });
-    const tokenData = await tokenResp.json();
+    const scenario = document.getElementById("leadType").value;
 
-    if (!tokenData.token) {
-      console.error(tokenData);
-      setStatus("Token error");
-      return;
-    }
+    let text = "Say hello clearly.";
 
-    pc = new RTCPeerConnection();
-    pc.addTransceiver("audio", { direction: "recvonly" });
+    if (scenario === "fsbo") text = "You are a skeptical FSBO seller. Speak.";
+    if (scenario === "expired") text = "You are frustrated your listing expired. Speak.";
+    if (scenario === "canceled") text = "You distrust agents. Speak.";
+    if (scenario === "withdrawn") text = "You are unsure what to do. Speak.";
+    if (scenario === "surprise") text = "You are a difficult seller personality. Speak.";
 
-    dc = pc.createDataChannel("oai-events");
+    const response = await fetch("/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
+    });
 
-    dc.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
+    const blob = await response.blob();
+    const audioUrl = URL.createObjectURL(blob);
 
-      if (msg.type === "error") {
-        console.error("SERVER ERROR:", msg.error);
-        setStatus("Server error");
-        return;
-      }
+    const audio = new Audio(audioUrl);
+    await audio.play();
 
-      console.log("SERVER:", msg);
-
-      if (msg.type === "session.created") {
-
-        // Enable voice system ONLY
-        dc.send(JSON.stringify({
-          type: "session.update",
-          session: {
-            voice: "alloy"
-          }
-        }));
-
-        const scenario = document.getElementById("leadType").value;
-
-        let text = "Say hello clearly.";
-
-        if (scenario === "fsbo") text = "You are a skeptical FSBO seller. Speak.";
-        if (scenario === "expired") text = "You are frustrated your listing expired. Speak.";
-        if (scenario === "canceled") text = "You distrust agents. Speak.";
-        if (scenario === "withdrawn") text = "You are unsure what to do. Speak.";
-        if (scenario === "surprise") text = "You are a difficult seller personality. Speak.";
-
-        setTimeout(() => {
-          dc.send(JSON.stringify({
-            type: "response.create",
-            response: {
-              modalities: ["audio", "text"],
-              instructions: text,
-              audio: {
-                voice: "alloy"
-              }
-            }
-          }));
-        }, 300);
-
-        setStatus("Speaking...");
-      }
-
-      if (msg.type === "response.output_audio.delta") {
-        const float32 = base64ToFloat32(msg.delta);
-        playPCM(float32);
-      }
-
-      if (msg.type === "response.done") {
-        setStatus("Done");
-      }
-    };
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    const sdpResp = await fetch(
-      "https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17",
-      {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + tokenData.token,
-          "Content-Type": "application/sdp"
-        },
-        body: offer.sdp
-      }
-    );
-
-    if (!sdpResp.ok) {
-      const errText = await sdpResp.text();
-      console.error("Realtime error:", errText);
-      setStatus("Realtime error");
-      return;
-    }
-
-    const answer = await sdpResp.text();
-    await pc.setRemoteDescription({ type: "answer", sdp: answer });
-
-    setStatus("Connected");
+    setStatus("Done");
 
   } catch (e) {
     console.error(e);
